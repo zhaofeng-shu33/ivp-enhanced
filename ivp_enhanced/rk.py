@@ -10,56 +10,8 @@ from scipy.optimize._numdiff import group_columns
 from scipy.sparse.linalg import splu
 from scipy.linalg import lu_factor, lu_solve
 
-import torch
-from torchdiffeq._impl.rk_common import _UncheckedAssign
-from torchdiffeq._impl.misc import Perturb
 
-def _runge_kutta_step(func, y0, f0, t0, dt, t1, tableau):
-    """Take an arbitrary Runge-Kutta step and estimate error.
-    Args:
-        func: Function to evaluate like `func(t, y)` to compute the time derivative of `y`.
-        y0: Tensor initial value for the state.
-        f0: Tensor initial value for the derivative, computed from `func(t0, y0)`.
-        t0: float64 scalar Tensor giving the initial time.
-        dt: float64 scalar Tensor giving the size of the desired time step.
-        t1: float64 scalar Tensor giving the end time; equal to t0 + dt. This is used (rather than t0 + dt) to ensure
-            floating point accuracy when needed.
-        tableau: _ButcherTableau describing how to take the Runge-Kutta step.
-    Returns:
-        Tuple `(y1, f1, y1_error, k)` giving the estimated function value after
-        the Runge-Kutta step at `t1 = t0 + dt`, the derivative of the state at `t1`,
-        estimated error at `t1`, and a list of Runge-Kutta coefficients `k` used for
-        calculating these terms.
-    """
 
-    t0 = t0.to(y0.dtype)
-    dt = dt.to(y0.dtype)
-    t1 = t1.to(y0.dtype)
-    dt_inner = dt.reshape(-1, 1).expand(y0.shape)
-    # We use an unchecked assign to put data into k without incrementing its _version counter, so that the backward
-    # doesn't throw an (overzealous) error about in-place correctness. We know that it's actually correct.
-    k = torch.empty(*f0.shape, len(tableau.alpha) + 1, dtype=y0.dtype, device=y0.device)
-    k = _UncheckedAssign.apply(k, f0, (..., 0))
-    for i, (alpha_i, beta_i) in enumerate(zip(tableau.alpha, tableau.beta)):
-        if alpha_i == 1.:
-            # Always step to perturbing just before the end time, in case of discontinuities.
-            ti = t1
-            perturb = Perturb.PREV
-        else:
-            ti = t0 + alpha_i * dt
-            perturb = Perturb.NONE
-        yi = y0 + k[..., :i + 1].matmul(beta_i).view_as(f0) * dt_inner
-        f = func(ti, yi, perturb=perturb)
-        k = _UncheckedAssign.apply(k, f, (..., i + 1))
-
-    if not (tableau.c_sol[-1] == 0 and (tableau.c_sol[:-1] == tableau.beta[-1]).all()):
-        # This property (true for Dormand-Prince) lets us save a few FLOPs.
-        yi = y0 + k.matmul(tableau.c_sol).view_as(f0) * dt_inner
-
-    y1 = yi
-    f1 = k[..., -1]
-    y1_error = k.matmul(tableau.c_error) * dt_inner
-    return y1, f1, y1_error, k
 
 NEWTON_MAXITER = 6
 def solve_collocation_system(fun, t, y, h, Z0, scale, tol,
