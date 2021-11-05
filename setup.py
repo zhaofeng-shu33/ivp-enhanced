@@ -3,7 +3,7 @@ with open("README.md") as fh:
     long_description = fh.read()
 setup(
     name='ivp_enhanced',
-    version='0.0.2',
+    version='0.0.3',
     packages=find_packages(include=['ivp_enhanced', 'ivp_enhanced.*']),
     long_description=long_description,
     long_description_content_type="text/markdown",
