@@ -9,7 +9,7 @@ from scipy.sparse import csc_matrix, issparse, eye
 from scipy.optimize._numdiff import group_columns
 from scipy.sparse.linalg import splu
 from scipy.linalg import lu_factor, lu_solve
-
+from scipy.integrate._ivp import dop853_coefficients
 
 
 
@@ -339,6 +339,69 @@ class DOPRI5(RungeKuttaAdaptive):
     B = np.array([35/384, 0, 500/1113, 125/192, -2187/6784, 11/84])
     E = np.array([-71/57600, 0, 71/16695, -71/1920, 17253/339200, -22/525,
                   1/40])
+
+class DOPRI853(RungeKuttaAdaptive):
+    n_stages = dop853_coefficients.N_STAGES
+    order = 8
+    error_estimator_order = 7
+    A = dop853_coefficients.A[:n_stages, :n_stages]
+    B = dop853_coefficients.B
+    C = dop853_coefficients.C[:n_stages]
+    E3 = dop853_coefficients.E3
+    E5 = dop853_coefficients.E5
+    D = dop853_coefficients.D
+
+    A_EXTRA = dop853_coefficients.A[n_stages + 1:]
+    C_EXTRA = dop853_coefficients.C[n_stages + 1:]
+
+    def __init__(self, fun, t0, y0, t_bound, max_step=np.inf,
+                 rtol=1e-3, atol=1e-6, vectorized=False,
+                 first_step=None, **extraneous):
+        super().__init__(fun, t0, y0, t_bound, max_step=max_step, rtol=rtol, atol=atol,
+                         vectorized=vectorized, first_step=first_step, **extraneous)
+        self.K_extended = np.empty((dop853_coefficients.N_STAGES_EXTENDED,
+                                    self.n), dtype=self.y.dtype)
+        self.K = self.K_extended[:self.n_stages + 1]
+
+    def _estimate_error(self, K, h):  # Left for testing purposes.
+        err5 = np.dot(K.T, self.E5)
+        err3 = np.dot(K.T, self.E3)
+        denom = np.hypot(np.abs(err5), 0.1 * np.abs(err3))
+        correction_factor = np.ones_like(err5)
+        mask = denom > 0
+        correction_factor[mask] = np.abs(err5[mask]) / denom[mask]
+        return h * err5 * correction_factor
+
+    def _estimate_error_norm(self, K, h, scale):
+        err5 = np.dot(K.T, self.E5) / scale
+        err3 = np.dot(K.T, self.E3) / scale
+        err5_norm_2 = np.linalg.norm(err5)**2
+        err3_norm_2 = np.linalg.norm(err3)**2
+        if err5_norm_2 == 0 and err3_norm_2 == 0:
+            return 0.0
+        denom = err5_norm_2 + 0.01 * err3_norm_2
+        return np.abs(h) * err5_norm_2 / np.sqrt(denom * len(scale))
+
+    def _dense_output_impl(self):
+        K = self.K_extended
+        h = self.h_previous
+        for s, (a, c) in enumerate(zip(self.A_EXTRA, self.C_EXTRA),
+                                   start=self.n_stages + 1):
+            dy = np.dot(K[:s].T, a[:s]) * h
+            K[s] = self.fun(self.t_old + c * h, self.y_old + dy)
+
+        F = np.empty((dop853_coefficients.INTERPOLATOR_POWER, self.n),
+                     dtype=self.y_old.dtype)
+
+        f_old = K[0]
+        delta_y = self.y - self.y_old
+
+        F[0] = delta_y
+        F[1] = h * f_old - delta_y
+        F[2] = 2 * delta_y - h * (self.f + f_old)
+        F[3:] = h * np.dot(self.D, K)
+
+        return Dop853DenseOutput(self.t_old, self.t, self.y_old, F)
 
 class ImplicitRungeKuttaAdaptive(OdeSolver):
     C: np.ndarray = NotImplemented
