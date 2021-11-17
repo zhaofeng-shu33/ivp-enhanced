@@ -157,7 +157,9 @@ class RungeKuttaAdaptive(OdeSolver):
             self.h_abs = validate_max_step(step)
         self.record_err = record_err and self.adaptive
         if self.record_err:
-            self.err = [self.previous_error_norm]
+            self.err = []
+            if self.is_pi_control:
+                self.err.append(self.previous_error_norm)
         self.K = np.empty((self.n_stages + 1, self.n), dtype=self.y.dtype)
         self.h_previous = None
         if self.order >= 3: # construct P on the fly
