@@ -118,7 +118,7 @@ class RungeKuttaAdaptive(OdeSolver):
                  max_step=np.inf,
                  rtol=1e-3, atol=1e-6, first_step=None, beta_1=None,
                  beta_2=None, controller='IController', max_nfev = np.inf,
-                 record_err=False, no_reject=False,
+                 record_err=False, no_reject=False, ignore_validate_tol = False,
                  vectorized=False, **extraneous):
         warn_extraneous(extraneous)
         super().__init__(fun, t0, y0, t_bound, vectorized,
@@ -145,7 +145,11 @@ class RungeKuttaAdaptive(OdeSolver):
 
         if self.adaptive:
             self.max_step = validate_max_step(max_step)
-            self.rtol, self.atol = validate_tol(rtol, atol, self.n)
+            if ignore_validate_tol:
+                self.rtol = rtol
+                self.atol = atol
+            else:
+                self.rtol, self.atol = validate_tol(rtol, atol, self.n)
             if first_step is None:
                 self.h_abs = select_initial_step(
                     self.fun, self.t, self.y, self.f, self.direction,
