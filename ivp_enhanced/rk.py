@@ -315,6 +315,7 @@ class Midpoint(RungeKuttaAdaptive):
     # linear interpolation
     P = np.array([[0.0], [1.0], [0.0]])
     E = np.array([-1.0, 1.0, 0])
+
 class BS3(RungeKuttaAdaptive):
     # Bogacki-Shampine method, also called ode23, RK23
     order = 3
