@@ -130,7 +130,7 @@ class RungeKuttaAdaptive(OdeSolver):
             self.adaptive = adaptive
             self.max_nfev = max_nfev
         self.no_reject = no_reject
-        if controller != 'PIController' or controller != 'IController':
+        if controller != 'PIController' and controller != 'IController':
             raise ValueError(f'Unsupported controller type: {controller}')
         if controller == 'PIController':
             self.is_pi_control = True
